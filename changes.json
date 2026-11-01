@@ -18,5 +18,18 @@
       "29 sentences: Luke Bradford's titles credited with venue and year, plus a few new ones marked as new; each has a shareable #address",
       "Light and dark schemes, the ÿ's two sealed cells as favicon, and VISION.md written"
     ]
+  },
+  {
+    "id": 2,
+    "date": "2026-11-01T10:34:28.931Z",
+    "title": "Ariadne's thread",
+    "summary": "Every carving can now be walked. A loose end of thread waits at the entrance; drag it through the corridors (or use the arrow keys), and leaving by the exit carves the next sentence. The four sentences of Four Paths lead into one another.",
+    "details": [
+      "Pointer and touch dragging follow the corridors from the head of the thread; walking back winds the thread up, and walking into a loop cuts it off",
+      "Arrow keys walk the maze; the canvas is focusable and describes itself; the caption announces each new sentence politely",
+      "Exiting draws the thread out through the gap, then moves to the next sentence (the Four Paths cycle, otherwise a new one) with a history entry, so Back retraces your way",
+      "A phone toolbar sliding away no longer re-breaks the lines and loses the thread",
+      "The generator modules are imported with the page's version stamp, so returning visitors never mix old and new code"
+    ]
   }
 ]

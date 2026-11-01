@@ -1,5 +1,8 @@
-import { layout, carve, SLACK, FREE } from "./maze.js";
-import { SENTENCES } from "./sentences.js";
+// Modules are imported with this file's own ?v= stamp, so a returning visitor
+// never pairs a new page with an old generator.
+const v = new URL(import.meta.url).search;
+const { layout, carve, SLACK, FREE } = await import(`./maze.js${v}`);
+const { SENTENCES } = await import(`./sentences.js${v}`);
 
 const canvas = document.getElementById("lattice");
 const ctx = canvas.getContext("2d");
@@ -16,6 +19,11 @@ let edges = []; // every wall segment of the carving, with its timing
 let start = 0; // when the carving began
 let end = 0; // when it finishes
 let frame = 0;
+let thread = [0]; // Ariadne's thread: the cells walked so far, from the entrance
+let outAt = 0; // when the thread left by the exit (0 while still inside)
+
+// After the way out, the four sentences of Four Paths lead into one another.
+const FOUR_PATHS = ["language-is-a-maze", "a-maze-is-a-labyrinth", "a-word-is-a-labyrinth", "a-word-is-a-language"];
 
 // ---------------------------------------------------------------- sentence
 
@@ -38,9 +46,11 @@ function show(next, animate) {
   document.title = `${sentence.text[0].toUpperCase()}${sentence.text.slice(1)} · Labÿrínta`;
   canvas.setAttribute(
     "aria-label",
-    `A maze whose corridors spell “${sentence.text}”. It is entered at the top left and left at the bottom right.`,
+    `A maze whose corridors spell “${sentence.text}”. It is entered at the top left and left at the bottom right. The arrow keys walk it.`,
   );
   maze = null;
+  thread = [0];
+  outAt = 0;
   place();
   start = performance.now();
   if (!animate || reduceMotion.matches) start -= 1e6;
@@ -50,7 +60,7 @@ function show(next, animate) {
 
 // ---------------------------------------------------------------- geometry
 
-function place() {
+function place(keepLines = false) {
   const vw = innerWidth, vh = innerHeight;
   const narrow = vw < 600;
   const margin = Math.round(Math.min(120, Math.max(20, vw * 0.07)));
@@ -59,12 +69,19 @@ function place() {
   const boxW = vw - 2 * margin;
   const boxH = Math.max(80, vh - top - below - margin);
   const words = sentence.text.split(" ");
-  const fit = layout(words, boxW, boxH, narrow ? 40 : 52);
+  const maxCell = narrow ? 40 : 52;
+  // A phone's toolbar sliding away changes only the height: keep the same
+  // carving (and the thread in it) rather than breaking the lines afresh.
+  const fit = keepLines && maze
+    ? { lines: maze.lines, cell: Math.min(maxCell, boxW / maze.W, boxH / maze.H) }
+    : layout(words, boxW, boxH, maxCell);
 
   const key = fit.lines.join("/");
   if (!maze || maze.lines.join("/") !== key) {
     maze = carve(fit.lines, sentence.text);
     edges = buildEdges(maze);
+    thread = [0];
+    outAt = 0;
   }
 
   const s = Math.max(6, Math.floor(fit.cell));
@@ -237,8 +254,43 @@ function draw(now) {
     line(x1, y1, x2, y2);
     ctx.lineCap = "square";
   }
+  drawThread(t);
   ctx.globalAlpha = 1;
   return t;
+}
+
+// The thread runs through the middle of the corridors, thinner than the walls
+// and with round ends, so it never reads as a wall. Its loose end waits just
+// outside the entrance.
+function drawThread(t) {
+  const a = ease((t - (end - 300)) / 600);
+  if (a <= 0) return;
+  const { s, left, top } = geo;
+  const { W } = maze;
+  const cx = (i) => left + ((i % W) + 0.5) * s;
+  const cy = (i) => top + (((i / W) | 0) + 0.5) * s;
+  ctx.globalAlpha = a;
+  ctx.lineWidth = Math.max(1.5, geo.lw * 0.6);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(left - s * 0.9, cy(0));
+  for (const i of thread) ctx.lineTo(cx(i), cy(i));
+  if (outAt) {
+    const k = ease((performance.now() - outAt) / 500);
+    const last = thread[thread.length - 1];
+    ctx.lineTo(cx(last) + s * 1.4 * k, cy(last));
+  }
+  ctx.stroke();
+  // The head of the thread: a small knot, where you pick it up again.
+  if (!outAt) {
+    const h = thread[thread.length - 1];
+    ctx.beginPath();
+    ctx.arc(cx(h), cy(h), Math.max(2.5, geo.lw * 0.9), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.lineJoin = "miter";
+  ctx.lineCap = "square";
 }
 
 let LATTICE_ALPHA = 0.11;
@@ -256,7 +308,7 @@ function loop() {
   const tick = (now) => {
     const t = draw(now);
     if (t > end - 500) document.body.classList.add("carved");
-    if (t < end) frame = requestAnimationFrame(tick);
+    if (t < end || (outAt && now - outAt < 600)) frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
 }
@@ -264,9 +316,119 @@ function loop() {
 // ---------------------------------------------------------------- events
 
 let resizeTimer = 0;
+let lastWidth = innerWidth;
 addEventListener("resize", () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { place(); loop(); }, 60);
+  resizeTimer = setTimeout(() => {
+    place(innerWidth === lastWidth);
+    lastWidth = innerWidth;
+    loop();
+  }, 60);
+});
+
+// ---------------------------------------------------------------- walking
+
+const linked = (a, b) => {
+  const { W, right, down } = maze;
+  if (b === a + 1 && a % W !== W - 1) return right[a];
+  if (b === a - 1 && b % W !== W - 1) return right[b];
+  if (b === a + W) return down[a];
+  if (b === a - W) return down[b];
+  return 0;
+};
+
+// Take one step into a neighbouring cell: forward if it is new, back (winding
+// the thread up) if it is where we just came from.
+function step(to) {
+  if (outAt || !document.body.classList.contains("carved")) return false;
+  const head = thread[thread.length - 1];
+  if (thread.length > 1 && thread[thread.length - 2] === to) thread.pop();
+  else if (linked(head, to)) {
+    // Walking into a cell the thread already passes through cuts the loop off.
+    const seen = thread.indexOf(to);
+    if (seen >= 0) thread.length = seen + 1;
+    else thread.push(to);
+  } else return false;
+  if (thread[thread.length - 1] === maze.W * maze.H - 1) leave();
+  loop();
+  return true;
+}
+
+// Follow the pointer along the corridors: the shortest way from the head of
+// the thread to the cell under the finger, if it is close.
+function walkTo(target) {
+  const head = thread[thread.length - 1];
+  if (target === head || target < 0) return;
+  const { W, H } = maze;
+  const prev = new Map([[head, -1]]);
+  let frontier = [head];
+  for (let d = 0; d < 6 && !prev.has(target); d++) {
+    const next = [];
+    for (const i of frontier) {
+      for (const j of [i + 1, i - 1, i + W, i - W]) {
+        if (j < 0 || j >= W * H || prev.has(j) || !linked(i, j)) continue;
+        prev.set(j, i);
+        next.push(j);
+      }
+    }
+    frontier = next;
+  }
+  if (!prev.has(target)) return;
+  const route = [];
+  for (let i = target; i !== head; i = prev.get(i)) route.unshift(i);
+  for (const i of route) if (!step(i)) break;
+}
+
+function cellAt(x, y) {
+  const { s, left, top } = geo;
+  const cx = Math.floor((x - left) / s), cy = Math.floor((y - top) / s);
+  if (cx < 0 || cy < 0 || cx >= maze.W || cy >= maze.H) return -1;
+  return cy * maze.W + cx;
+}
+
+function leave() {
+  outAt = performance.now();
+  const at = FOUR_PATHS.indexOf(sentence.slug);
+  let next;
+  if (at >= 0) next = FOUR_PATHS[(at + 1) % FOUR_PATHS.length];
+  else {
+    const pool = SENTENCES.filter((s) => s.slug !== sentence.slug);
+    next = pool[Math.floor(Math.random() * pool.length)].slug;
+  }
+  setTimeout(() => { location.hash = next; }, reduceMotion.matches ? 300 : 1100);
+}
+
+let dragging = false;
+canvas.addEventListener("pointerdown", (e) => {
+  const c = cellAt(e.clientX, e.clientY);
+  // Pick the thread up anywhere along it (or at the entrance).
+  const at = thread.indexOf(c);
+  if (at < 0 || outAt) return;
+  if (!document.body.classList.contains("carved")) return;
+  thread.length = at + 1;
+  dragging = true;
+  canvas.setPointerCapture(e.pointerId);
+  canvas.classList.add("walking");
+  loop();
+});
+canvas.addEventListener("pointermove", (e) => {
+  const c = cellAt(e.clientX, e.clientY);
+  if (dragging) walkTo(c);
+  else canvas.classList.toggle("can-walk", thread.includes(c) && !outAt);
+});
+const drop = () => { dragging = false; canvas.classList.remove("walking"); };
+canvas.addEventListener("pointerup", drop);
+canvas.addEventListener("pointercancel", drop);
+
+const KEYS = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
+addEventListener("keydown", (e) => {
+  const k = KEYS[e.key];
+  if (!k || e.metaKey || e.ctrlKey || e.altKey || !maze) return;
+  const head = thread[thread.length - 1];
+  const x = (head % maze.W) + k[0], y = ((head / maze.W) | 0) + k[1];
+  if (x < 0 || y < 0 || x >= maze.W || y >= maze.H) return;
+  e.preventDefault();
+  step(y * maze.W + x);
 });
 addEventListener("hashchange", () => {
   const next = SENTENCES.find((s) => s.slug === decodeURIComponent(location.hash.slice(1)));

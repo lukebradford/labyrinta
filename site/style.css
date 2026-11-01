@@ -38,7 +38,11 @@ body {
   position: fixed;
   inset: 0;
   display: block;
+  touch-action: none;
 }
+#lattice.can-walk { cursor: grab; }
+#lattice.walking { cursor: grabbing; }
+#lattice:focus-visible { outline: none; }
 
 /* The credit, small and quiet in the top left, as on the published pages. */
 #credit {

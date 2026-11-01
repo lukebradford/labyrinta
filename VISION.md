@@ -13,7 +13,7 @@
 
 ## Where it is going (rough order)
 
-1. **Walk it.** Trace the route with finger, mouse or arrow keys; the trace is a thread (Ariadne's) left on the page. Reaching the exit carves the next sentence. Loops through *Four Paths* (language → maze → labyrinth → word → language).
+1. ~~**Walk it.**~~ Done (change 2): drag the thread or use arrow keys; the exit carves the next sentence; *Four Paths* loops. Next: make finishing feel earned (remember solved sentences? a trace of every thread ever walked in this browser?), and let the walked thread *matter*: e.g. the route becomes the seed of the next carving.
 2. **Trail / trial.** Pairs that differ by a swapped letter, two near-identical mazes.
 3. **Rooms in the lattice**: mazes / labyrinths / wilderness (the three parts of the 2018 *Labÿrínta* manuscript); a unicursal classical labyrinth to trace slowly; a wilderness where the grid dissolves.
 4. **The mesh**: zoom out until sentences become texture (*Mesh*, *One Path*).
