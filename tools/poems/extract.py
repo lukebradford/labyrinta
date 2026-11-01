@@ -3,8 +3,10 @@
 
     python3 tools/poems/extract.py --pdfs DIR [--pdfs DIR ...]
 
-DIR holds the published PDFs, by the file names below: the free PDFs linked
-from lukebradford.xyz/publications, and Timglaset's free PDF of Four Paths.
+DIR holds the PDFs, by the file names below: the free PDFs linked from
+lukebradford.xyz/publications, Timglaset's free PDF of Four Paths, and for
+the three pieces published only as images, the author's design PDFs (checked
+against the published images by verify.py; see PUBLISHED_IMAGES).
 Needs PyMuPDF (`pip install pymupdf`).
 
 Nothing is redrawn. Every maze in these PDFs is a set of straight vector
@@ -30,6 +32,10 @@ PIECES = [
      "Four Paths II.pdf", [1, 2, 3, 4]),
     ("two-paths", "Two Paths", "Originally published as a leaflet by No Press, March 2019",
      "Two Paths.pdf", [1]),
+    ("library-of-babel", "A Labyrinth Is a Library of Babel", "Originally published online in <i>petrichor</i>, April 2019",
+     "Luke Bradford — “A Labyrinth Is a Library of Babel”.pdf", [1]),
+    ("rabbit-hole", "A Labyrinth Is a Rabbit Hole", "Originally published as a broadside by The Blasted Tree, 2019",
+     "a labyrinth is a rabbit hole 6.pdf", [1]),
     ("barrel-of-laughs", "A Labyrinth Is a Barrel of Laughs", "Originally published as a postcard by Timglaset, December 2019",
      "A Labyrinth Is a Barrel of Laughs.pdf", [1]),
     ("mesh", "Mesh", "Originally published online by <i>RENEGADE</i>, June 2020",
@@ -38,17 +44,33 @@ PIECES = [
      "A Labyrinth Is a Narrow Hell.pdf", [1]),
     ("borderline", "A Labyrinth Is a Borderline", "Originally published in <i>Myth &amp; Metamorphosis</i> (Penteract Press), October 2020",
      "A Labyrinth Is a Borderline.pdf", [1]),
+    ("barely-real", "A Labyrinth Is Barely Real", "Originally published in <i>The Minute Review</i>, May 2022",
+     "a labyrinth is barely real 7.pdf", [1]),
     ("language-is-a-trap", "Language Is a Trap", "Originally published in <i>Buzdokuz</i>, November 2022",
      "Language Is a Trap.pdf", [1]),
     ("one-path", "One Path", "Originally published as a leaflet by Paper View Books, October 2024",
      "One Path.pdf", [1]),
 ]
 
+# Pieces published only as images. Their vector files are the author's own
+# design files, so verify.py checks each against the published image: the same
+# wall on every cell edge, and every differing pixel on the edge of a stroke.
+PUBLISHED_IMAGES = {
+    "library-of-babel": dict(file="A-Labyrinth-Is-a-Library-of-Babel-957-x-398.png",
+                             url="https://petrichormag.com/wp-content/uploads/2019/03/A-Labyrinth-Is-a-Library-of-Babel-957-x-398.png"),
+    "rabbit-hole": dict(file="A+Labyrinth+Is+a+Rabbit+Hole+2500+x+1267.png",
+                        url="https://images.squarespace-cdn.com/content/v1/537906c1e4b0e00f98115861/1555420047008-1R6QHDXOWLH28QTJHD2J/A+Labyrinth+Is+a+Rabbit+Hole+2500+x+1267.png"),
+    # A scan, at 150 dpi: the left half of the spread on page 5.
+    "barely-real": dict(file="theminutereview2-4.pdf", page=5, half="left",
+                        url="https://derekbeaulieu.ca/wp-content/uploads/2022/05/theminutereview2-4.pdf"),
+}
+
 HEADER = """// Luke Bradford's published maze poems, reproduced exactly.
 //
-// Every wall segment below was read from the published PDF of the piece (the
-// free PDFs linked from lukebradford.xyz/publications, and Timglaset's free PDF
-// of Four Paths), not redrawn. Coordinates are in cells, measured from the
+// Every wall segment below was read from the vector PDF of the piece (the free
+// PDFs linked from lukebradford.xyz/publications, Timglaset's free PDF of Four
+// Paths, and for pieces published only as images, the author's design PDF,
+// checked wall by wall against the published image), not redrawn. Coordinates are in cells, measured from the
 // top-left post of each maze (and each maze's x, y from the top-left post of
 // the first maze on its page); each segment is x1, y1, x2, y2 and is drawn
 // with butt caps at the stroke width given (a fraction of a cell), in the

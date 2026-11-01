@@ -66,5 +66,16 @@
       "Walking is read off the published walls (site/walls.js): Two Paths is walked maze by maze, and Language Is a Trap has no way out, as published",
       "Removed the maze-letter generator, the invented sentences and the ÿ favicon; the page is light only, like the poems"
     ]
+  },
+  {
+    "id": 6,
+    "date": "2026-11-01T13:17:03.926Z",
+    "title": "Three more, found online",
+    "summary": "A Labyrinth Is a Library of Babel, A Labyrinth Is a Rabbit Hole and A Labyrinth Is Barely Real join the walk. They were published only as images, so each is drawn from the author's vector file after checking it wall by wall against the published image.",
+    "details": [
+      "Library of Babel (petrichor, April 2019) and Rabbit Hole (The Blasted Tree broadside, 2019) come after Two Paths; Barely Real (The Minute Review 2.4, May 2022) comes before Language Is a Trap: 18 rooms in all",
+      "tools/poems/verify.py gains a fourth check: the wall on every cell edge of each published image (petrichor's PNG, The Blasted Tree's PNG, The Minute Review's scan) matches the vector, and every differing pixel lies on a stroke's edge; Rabbit Hole's renders to the published PNG with no differing pixels",
+      "The site's canvas still matches MuPDF renders of the sources with zero differing pixels in every room"
+    ]
   }
 ]

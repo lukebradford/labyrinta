@@ -11,6 +11,12 @@
    headless Chrome at 2x with 44 px cells and compares the drawn mazes with
    MuPDF renders of the published pages on the same pixel grid: every pixel\n   must be ink in both or paper in both (at half grey).
 
+4. Published images: for the pieces published only as images (PUBLISHED_IMAGES
+   in extract.py; download them into a --pdfs folder), reads the wall on every
+   cell edge off the published image and requires it to match, then renders
+   the vector onto the image's frame and requires every differing pixel to
+   lie within 1 px of a stroke's edge.
+
 Exits non-zero if anything fails. Needs PyMuPDF, numpy and Pillow, and
 Google Chrome for step 3.
 """
@@ -20,7 +26,7 @@ import fitz
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from extract import OUT, extract, public  # noqa: E402
+from extract import OUT, PUBLISHED_IMAGES, extract, find, public  # noqa: E402
 
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 
@@ -95,6 +101,70 @@ def site(poems, base):
     return bad
 
 
+def published_images(poems, dirs):
+    from PIL import Image
+    from scipy import ndimage
+    ok = True
+    for p in poems:
+        spec = PUBLISHED_IMAGES.get(p["id"])
+        if not spec:
+            continue
+        m = p["pages"][0]["mazes"][0]
+        path = find(dirs, spec["file"])
+        if path.endswith(".pdf"):
+            doc = fitz.open(path)
+            pix = fitz.Pixmap(doc, doc[spec["page"] - 1].get_images(full=True)[0][0])
+            im = Image.frombytes("RGB" if pix.n == 3 else "L", (pix.width, pix.height), pix.samples)
+            if spec.get("half") == "left":
+                im = im.crop((0, 0, im.width // 2, im.height))
+        else:
+            im = Image.open(path).convert("RGBA")
+            bg = Image.new("RGBA", im.size, "white")
+            bg.alpha_composite(im)
+            im = bg
+        ink = np.asarray(im.convert("L")) < 128
+        # The frame: the rows and columns with the longest runs of ink.
+        rs, cs = ink.sum(1), ink.sum(0)
+        ys, xs = np.where(rs > 0.35 * rs.max())[0], np.where(cs > 0.35 * cs.max())[0]
+        ink = ink[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        W, H = m["W"], m["H"]
+        px, py = ink.shape[1] / (W + m["stroke"]), ink.shape[0] / (H + m["stroke"])
+        ox, oy = px * m["stroke"] / 2, py * m["stroke"] / 2
+        r = max(1, int(min(px, py) / 16))
+        dark = lambda x, y: ink[int(round(y)) - r:int(round(y)) + r + 1, int(round(x)) - r:int(round(x)) + r + 1].mean() > 0.5
+        got_h = np.array([[dark(ox + (x + .5) * px, oy + y * py) for x in range(W)] for y in range(H + 1)])
+        got_v = np.array([[dark(ox + x * px, oy + (y + .5) * py) for x in range(W + 1)] for y in range(H)])
+        want_h, want_v = np.zeros_like(got_h), np.zeros_like(got_v)
+        s = m["segs"]
+        for k in range(0, len(s), 4):
+            x1, y1, x2, y2 = s[k:k + 4]
+            if abs(y1 - y2) < 1e-6:
+                a, b = sorted((x1, x2))
+                for x in range(W):
+                    want_h[round(y1), x] |= a <= x + .25 and b >= x + .75
+            else:
+                a, b = sorted((y1, y2))
+                for y in range(H):
+                    want_v[y, round(x1)] |= a <= y + .25 and b >= y + .75
+        walls = int((got_h != want_h).sum() + (got_v != want_v).sum())
+        # The vector, rendered onto the published frame.
+        page = page_of(m)
+        w, (pox, poy), pitch = m["stroke"] * m["pitch_pt"], m["origin_pt"], m["pitch_pt"]
+        clip = fitz.Rect(pox - w / 2, poy - w / 2, pox + W * pitch + w / 2, poy + H * pitch + w / 2)
+        zx, zy = ink.shape[1] / clip.width, ink.shape[0] / clip.height
+        ref = gray(page.get_pixmap(matrix=fitz.Matrix(zx, 0, 0, zy, -clip.x0 * zx, -clip.y0 * zy), clip=clip,
+                                   colorspace=fitz.csGRAY, alpha=False)) < 128
+        hh, ww = min(ref.shape[0], ink.shape[0]), min(ref.shape[1], ink.shape[1])
+        ref, got = ref[:hh, :ww], ink[:hh, :ww]
+        edge = (ref ^ ndimage.binary_erosion(ref)) | (~ref ^ ndimage.binary_erosion(~ref))
+        far = ndimage.distance_transform_edt(~edge)[ref ^ got]
+        worst = float(far.max()) if far.size else 0.0
+        ok &= walls == 0 and worst <= 1
+        print(f"  {p['title']:36s} {spec['file'][:40]:40s} {ww}x{hh} px  walls differing: {walls}  "
+              f"pixels differing: {int((ref ^ got).sum())}, at most {worst:.0f} px from a stroke's edge")
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pdfs", action="append", required=True)
@@ -110,8 +180,10 @@ def main():
     if args.site:
         print("3. The site's canvas against MuPDF renders of the PDFs:")
         bad += site(poems, args.site)
+    print("4. Pieces published as images, against those images:")
+    imgs = published_images(poems, args.pdfs)
     print(f"worst stroke error {worst:.5f} pt" + (f", differing pixels on the site: {bad}" if args.site else ""))
-    sys.exit(0 if same and worst <= TOL_PT and bad == 0 else 1)
+    sys.exit(0 if same and imgs and worst <= TOL_PT and bad == 0 else 1)
 
 
 if __name__ == "__main__":
