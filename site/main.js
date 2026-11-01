@@ -1,53 +1,68 @@
 // Modules are imported with this file's own ?v= stamp, so a returning visitor
-// never pairs a new page with an old generator.
+// never pairs a new page with old data.
 const v = new URL(import.meta.url).search;
-const { layout, carve, SLACK, FREE } = await import(`./maze.js${v}`);
-const { SENTENCES } = await import(`./sentences.js${v}`);
+const { POEMS, INK } = await import(`./poems.js${v}`);
+const { graph } = await import(`./walls.js${v}`);
 
 const canvas = document.getElementById("lattice");
 const ctx = canvas.getContext("2d");
-const caption = document.getElementById("caption");
-const captionLink = caption.querySelector("a");
-const note = document.getElementById("note");
-const credit = document.getElementById("credit");
+const title = document.getElementById("title");
+const numeral = document.getElementById("numeral");
+const credit = document.getElementById("credit-line");
+const creditBox = document.getElementById("credit");
+const heading = document.getElementById("heading");
+const nav = document.getElementById("rooms");
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-let sentence = null; // the sentence being shown
-let maze = null; // the carving for the current line breaks
-let geo = null; // where everything sits on screen
-let edges = []; // every wall segment of the carving, with its timing
-let start = 0; // when the carving began
-let end = 0; // when it finishes
-let frame = 0;
-let thread = [0]; // Ariadne's thread: the cells walked so far, from the entrance
-let outAt = 0; // when the thread left by the exit (0 while still inside)
+const LATTICE_ALPHA = 0.1;
+const ROMAN = ["i", "ii", "iii", "iv", "v", "vi"];
 
-// ---------------------------------------------------------------- sentence
+// One room per published page. Each maze knows its walls, gaps and way out.
+const ROOMS = [];
+for (const poem of POEMS) {
+  poem.pages.forEach((page, k) => {
+    for (const m of page.mazes) m.g = graph(m);
+    ROOMS.push({ poem, page, k, n: poem.pages.length, slug: poem.pages.length > 1 ? `${poem.id}-${k + 1}` : poem.id });
+  });
+}
 
-function pick() {
-  const fromHash = SENTENCES.find((s) => s.slug === decodeURIComponent(location.hash.slice(1)));
-  if (fromHash) return fromHash;
-  // A different sentence from the one seen last, when possible.
-  let last = null;
-  try { last = localStorage.getItem("labyrinta:last"); } catch {}
-  const pool = SENTENCES.filter((s) => s.slug !== last);
-  return pool[Math.floor(Math.random() * pool.length)];
+let room = null;
+let threads = []; // per maze: null until entered, then the cells walked from the entrance
+let active = 0; // the maze on this page that the thread is in
+let outAt = []; // per maze: when its thread left by the exit
+let geo = null;
+let edges = []; // per maze: the template edges that are carved away
+let start = 0, end = 0, frame = 0;
+
+// ---------------------------------------------------------------- rooms
+
+function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function safeSet(k, val) { try { localStorage.setItem(k, val); } catch {} }
+const solved = new Set(JSON.parse(safeGet("labyrinta:solved") || "[]"));
+
+function fromHash() {
+  const slug = decodeURIComponent(location.hash.slice(1));
+  return ROOMS.find((r) => r.slug === slug) || null;
 }
 
 function show(next, animate) {
-  sentence = next;
-  try { localStorage.setItem("labyrinta:last", sentence.slug); } catch {}
-  captionLink.textContent = sentence.text;
-  captionLink.href = "#" + sentence.slug;
-  note.textContent = sentence.note;
-  document.title = `${sentence.text[0].toUpperCase()}${sentence.text.slice(1)} · Labÿrínta`;
+  room = next;
+  safeSet("labyrinta:last", room.slug);
+  const { poem, k, n } = room;
+  threads = room.page.mazes.map(() => null);
+  outAt = room.page.mazes.map(() => 0);
+  active = 0;
+  title.textContent = poem.title;
+  numeral.textContent = n > 1 ? ROMAN[k] : "";
+  credit.innerHTML = poem.credit;
+  document.title = `${poem.title}${n > 1 ? " " + ROMAN[k] : ""} · Luke Bradford · Labÿrínta`;
   canvas.setAttribute(
     "aria-label",
-    `A maze whose corridors spell “${sentence.text}”. It is entered at the top left and left at the bottom right. The arrow keys walk it.`,
+    `${poem.title}${n > 1 ? ", " + ROMAN[k] + " of " + ROMAN[n - 1] : ""}, a maze poem by Luke Bradford. The arrow keys walk it from the entrance.`,
   );
-  maze = null;
-  thread = [0];
-  outAt = 0;
+  renderNav();
+  end = 0;
+  edges = room.page.mazes.map(buildEdges);
   place();
   start = performance.now();
   if (!animate || reduceMotion.matches) start -= 1e6;
@@ -55,77 +70,58 @@ function show(next, animate) {
   loop();
 }
 
+function renderNav() {
+  nav.replaceChildren();
+  let last = null;
+  for (const r of ROOMS) {
+    if (last && last !== r.poem) nav.append(Object.assign(document.createElement("span"), { className: "gap" }));
+    last = r.poem;
+    const a = document.createElement("a");
+    const name = `${r.poem.title}${r.n > 1 ? " " + ROMAN[r.k] : ""}`;
+    a.href = "#" + r.slug;
+    a.setAttribute("aria-label", name);
+    a.title = name;
+    if (r === room) a.setAttribute("aria-current", "page");
+    if (solved.has(r.slug)) a.classList.add("walked");
+    nav.append(a);
+  }
+}
+
 // ---------------------------------------------------------------- geometry
 
-function place(keepLines = false) {
+function place() {
   const vw = innerWidth, vh = innerHeight;
   const narrow = vw < 600;
-  const margin = Math.round(Math.min(120, Math.max(20, vw * 0.07)));
-  const top = narrow ? 64 : 84; // room for the credit
-  const below = narrow ? 120 : 132; // room for the caption
+  const margin = Math.round(Math.min(96, Math.max(18, vw * 0.06)));
+  const topRoom = narrow ? 128 : 136; // the credit, then the title
+  const bottomRoom = narrow ? 64 : 76; // the row of rooms
+  const { W, H } = room.page;
   const boxW = vw - 2 * margin;
-  let boxH = Math.max(80, vh - top - below - margin);
-  const words = sentence.text.split(" ");
-  const maxCell = narrow ? 40 : 52;
+  const boxH = Math.max(60, vh - topRoom - bottomRoom);
+  const s = Math.min(narrow ? 36 : 44, boxW / W, boxH / H);
+  const pw = W * s, ph = H * s;
+  const left = Math.round((vw - pw) / 2);
+  const top = Math.round(topRoom + (boxH - ph) / 2);
+  geo = { vw, vh, s, left, top, pw, ph, ox: mod(left, s), oy: mod(top, s), clear: [] };
 
-  // Lay out, then make sure nothing collides: the maze must clear the credit,
-  // and the caption must fit on screen. If not, try again with a smaller box.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    // A phone's toolbar sliding away changes only the height: keep the same
-    // carving (and the thread in it) rather than breaking the lines afresh.
-    const fit = keepLines && maze
-      ? { lines: maze.lines, cell: Math.min(maxCell, boxW / maze.W, boxH / maze.H) }
-      : layout(words, boxW, boxH, maxCell);
+  // A clearing of a cell all round the mazes: the lattice never touches the poem.
+  geo.clear.push(snapRect(left - s, top - s, pw + 2 * s, ph + 2 * s));
 
-    if (!maze || maze.lines.join("/") !== fit.lines.join("/")) {
-      maze = carve(fit.lines, sentence.text);
-      edges = buildEdges(maze);
-      thread = [0];
-      outAt = 0;
-    }
+  // The title, centred above the maze, as on the published pages.
+  heading.style.cssText = `left:${Math.round(vw / 2)}px;top:0px;`;
+  const hh = heading.offsetHeight, hw = heading.offsetWidth;
+  const ht = Math.round(Math.max(narrow ? 66 : 72, top - s - hh - Math.max(10, s * 0.4)));
+  heading.style.top = `${ht}px`;
+  geo.clear.push(snapRect(vw / 2 - hw / 2 - 8, ht - 6, hw + 16, hh + 12));
 
-    const s = Math.max(6, Math.floor(fit.cell));
-    const bw = maze.W * s, bh = maze.H * s;
-    const left = Math.round((vw - bw) / 2);
-    // Centre the carving and its caption together in the space under the credit.
-    const groupH = bh + s + below * 0.6;
-    let blockTop = Math.round(top + Math.max(0, (vh - top - groupH) / 2 - s));
-    const ox = mod(left, s), oy = mod(blockTop, s);
+  // The credit, top left, as on the published pages.
+  creditBox.style.cssText = `left:${narrow ? 16 : 24}px;top:${narrow ? 14 : 20}px;max-width:${vw - 32}px;`;
+  const cr = creditBox.getBoundingClientRect();
+  geo.clear.push(snapRect(cr.left - 8, cr.top - 6, cr.width + 16, cr.height + 12));
 
-    // The credit, in a clearing in the top left corner of the lattice.
-    const cx = ox + s * Math.max(1, Math.ceil((16 - ox) / s));
-    const cy = oy + s * Math.max(0, Math.ceil((12 - oy) / s));
-    credit.style.cssText = `left:${cx + Math.round(s * 0.5)}px;top:0px;`;
-    const crH = credit.offsetHeight, crW = credit.offsetWidth;
-    const crRows = Math.max(1, Math.ceil((crH + s * 0.6) / s));
-    const crBox = [cx, cy, snapUp(crW + s, s), crRows * s];
-    // Push the maze down whole rows (so the lattice stays aligned) until it
-    // clears the credit, if they share any columns.
-    if (cx + crBox[2] > left && blockTop < cy + crBox[3] + s) {
-      blockTop += snapUp(cy + crBox[3] + s - blockTop, s);
-    }
-
-    // The caption, in a clearing one row below the maze.
-    const capW = Math.max(bw, Math.min(vw - 2 * 16, 34 * 16));
-    const capLeft = snapDown(Math.round((vw - capW) / 2) - ox, s) + ox;
-    const capRight = snapUp(Math.round((vw + capW) / 2) - ox, s) + ox;
-    caption.parentElement.style.cssText = `left:${capLeft}px;width:${capRight - capLeft}px;`;
-    const capH = caption.parentElement.offsetHeight;
-    const capTop = blockTop + bh + s;
-    const rows = Math.max(2, Math.ceil((capH + s) / s));
-    const overflow = capTop + rows * s - vh;
-    if (overflow > 0 && attempt < 3 && s > 6) {
-      boxH = Math.max(40, boxH - overflow - s);
-      keepLines = false;
-      continue;
-    }
-    caption.parentElement.style.top = `${capTop + Math.round((rows * s - capH) / 2)}px`;
-    credit.style.top = `${cy + Math.round((crRows * s - crH) / 2)}px`;
-
-    const lw = Math.max(2, 2 * Math.round(s / 10));
-    geo = { vw, vh, s, lw, left, top: blockTop, bw, bh, ox, oy, clear: [[capLeft, capTop, capRight - capLeft, rows * s], crBox] };
-    break;
-  }
+  nav.style.cssText = `left:${Math.round(vw / 2)}px;top:${Math.round(Math.min(vh - 34, top + ph + s + 14))}px;`;
+  const nr = nav.getBoundingClientRect();
+  geo.clear.push(snapRect(nr.left - 8, nr.top - 8, nr.width + 16, nr.height + 16));
 
   const dpr = Math.min(3, devicePixelRatio || 1);
   canvas.width = Math.round(vw * dpr);
@@ -133,57 +129,45 @@ function place(keepLines = false) {
   canvas.style.width = vw + "px";
   canvas.style.height = vh + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Where the page sits, so the drawing can be checked against the published PDFs.
+  Object.assign(canvas.dataset, { left, top, s });
 }
 
 const mod = (a, n) => ((a % n) + n) % n;
-const snapDown = (v, s) => Math.floor(v / s) * s;
-const snapUp = (v, s) => Math.ceil(v / s) * s;
+// Grow a rectangle outward to whole cells of the lattice.
+function snapRect(x, y, w, h) {
+  const { s, ox, oy } = geo;
+  const x0 = Math.floor((x - ox) / s) * s + ox, y0 = Math.floor((y - oy) / s) * s + oy;
+  const x1 = Math.ceil((x + w - ox) / s) * s + ox, y1 = Math.ceil((y + h - oy) / s) * s + oy;
+  return [x0, y0, x1 - x0, y1 - y0];
+}
 
-// Every segment of the lattice inside the carving: walls that stay, walls that
-// are carved away (in the order a flood from the entrance would reach them),
-// and the bare lattice of cells no letter uses.
+// The edges of the full template lattice that are not walls of the poem. They
+// are drawn at first, as in a blank template, and fall away in the order a
+// flood from the entrance reaches them. What is left is the poem, exactly.
 function buildEdges(m) {
-  const { W, H, kind, right, down, dist } = m;
+  const { W, H, g } = m;
   let maxDist = 0;
-  for (let i = 0; i < dist.length; i++) if (dist[i] > maxDist) maxDist = dist[i];
-  const exitDist = dist[W * H - 1] + 1;
-  const dt = Math.min(48, Math.max(10, 2000 / (maxDist + 1)));
-  const carveAt = (d) => 1150 + d * dt;
-  const boldAt = (x, y) => 120 + 700 * ((x + y) / (W + H));
+  for (let i = 0; i < g.dist.length; i++) maxDist = Math.max(maxDist, g.dist[i]);
+  const dt = Math.min(45, Math.max(4, 2200 / (maxDist + 1)));
+  // Cells the entrance cannot reach clear in the second half, sweeping diagonally.
+  const when = (i) => (g.dist[i] >= 0 ? g.dist[i] : maxDist * (0.5 + 0.5 * ((i % W) + ((i / W) | 0)) / (W + H)));
   const list = [];
-  const add = (x1, y1, x2, y2, type, d) =>
-    list.push({ x1, y1, x2, y2, type, bold: boldAt((x1 + x2) / 2, (y1 + y2) / 2), carve: type === 1 ? carveAt(d) : 0 });
-  const slack = (x, y) => x < 0 || y < 0 || x >= W || y >= H || kind[y * W + x] === SLACK;
-  const d2 = (a, b) => Math.min(dist[a] < 0 ? 1e9 : dist[a], dist[b] < 0 ? 1e9 : dist[b]);
-
-  for (let y = 0; y < H; y++) {
+  const add = (h, x, y, a, b) => {
+    const d = Math.min(a >= 0 ? when(a) : 1e9, b >= 0 ? when(b) : 1e9);
+    list.push({ h, x, y, carve: 1100 + d * dt, bold: 100 + 650 * ((x + y) / (W + H)) });
+  };
+  for (let y = 0; y <= H; y++) {
     for (let x = 0; x < W; x++) {
-      const i = y * W + x;
-      // right edge of this cell
-      if (x < W - 1) {
-        if (slack(x, y) && slack(x + 1, y)) add(x + 1, y, x + 1, y + 1, 2);
-        else add(x + 1, y, x + 1, y + 1, right[i] ? 1 : 0, d2(i, i + 1));
-      }
-      if (y < H - 1) {
-        if (slack(x, y) && slack(x, y + 1)) add(x, y + 1, x + 1, y + 1, 2);
-        else add(x, y + 1, x + 1, y + 1, down[i] ? 1 : 0, d2(i, i + W));
-      }
+      if (!g.hwall[y * W + x]) add(1, x, y, y > 0 ? (y - 1) * W + x : -1, y < H ? y * W + x : -1);
     }
   }
-  // The frame: open at the top left (the way in) and bottom right (the way out).
-  // Where a short line leaves cells unused, the frame steps around the text and
-  // the lattice runs on into them.
-  for (let x = 0; x < W; x++) {
-    add(x, 0, x + 1, 0, slack(x, 0) ? 2 : 0);
-    add(x, H, x + 1, H, slack(x, H - 1) ? 2 : 0);
-  }
   for (let y = 0; y < H; y++) {
-    add(0, y, 0, y + 1, slack(0, y) ? 2 : y === 0 ? 1 : 0, -1);
-    add(W, y, W, y + 1, slack(W - 1, y) ? 2 : y === H - 1 ? 1 : 0, exitDist);
+    for (let x = 0; x <= W; x++) {
+      if (!g.vwall[y * (W + 1) + x]) add(0, x, y, x > 0 ? y * W + x - 1 : -1, x < W ? y * W + x : -1);
+    }
   }
-  edges = list;
-  end = carveAt(exitDist) + 400;
-  m.carveAt = carveAt;
+  end = Math.max(end, 1100 + maxDist * dt + 450);
   return list;
 }
 
@@ -191,28 +175,18 @@ function buildEdges(m) {
 
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 3));
 
-function colors() {
-  const cs = getComputedStyle(document.documentElement);
-  LATTICE_ALPHA = parseFloat(cs.getPropertyValue("--lattice")) || 0.11;
-  TONE_ALPHA = parseFloat(cs.getPropertyValue("--tone")) || 0.06;
-  return { ink: cs.getPropertyValue("--ink").trim() };
-}
-
 function draw(now) {
   const t = now - start;
-  const { vw, vh, s, lw, left, top, bw, bh, ox, oy } = geo;
-  const { ink } = colors();
+  const { vw, vh, s, left, top, ox, oy } = geo;
   ctx.clearRect(0, 0, vw, vh);
-  ctx.strokeStyle = ink;
-  ctx.fillStyle = ink;
 
-  // The lattice: everywhere there is no carving and no clearing.
+  // The lattice, everywhere but the clearings.
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, vw, vh);
-  ctx.rect(left, top, bw, bh);
   for (const [x, y, w, h] of geo.clear) ctx.rect(x, y, w, h);
   ctx.clip("evenodd");
+  ctx.strokeStyle = INK;
   ctx.globalAlpha = LATTICE_ALPHA;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -221,165 +195,160 @@ function draw(now) {
   ctx.stroke();
   ctx.restore();
 
-  // A faint tone on the corridors that are not letters, so the letters read
-  // as the white ones. It arrives as the flood does.
-  const { W, H, kind, dist } = maze;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = y * W + x;
-      if (kind[i] !== FREE) continue;
-      const a = ease((t - maze.carveAt(dist[i])) / 500);
-      if (a <= 0) continue;
-      ctx.globalAlpha = TONE_ALPHA * a;
-      ctx.fillRect(left + x * s, top + y * s, s, s);
-    }
-  }
+  ctx.strokeStyle = INK;
+  ctx.fillStyle = INK;
+  ctx.lineCap = "butt";
+  const settled = t >= end;
+  const b = ease((t - 100) / 1000); // the template darkening
+  room.page.mazes.forEach((m, mi) => {
+    const mx = left + m.x * s, my = top + m.y * s, sw = m.stroke * s, half = m.stroke / 2;
 
-  // The carving.
-  ctx.lineCap = "square";
-  for (const e of edges) {
-    let x1 = left + e.x1 * s, y1 = top + e.y1 * s, x2 = left + e.x2 * s, y2 = top + e.y2 * s;
-    if (e.type === 2) {
-      ctx.globalAlpha = LATTICE_ALPHA;
-      ctx.lineWidth = 1;
-      ctx.lineCap = "butt";
-      line(x1, y1, x2, y2);
-      ctx.lineCap = "square";
-      continue;
+    // Template edges that are not part of the poem, until they fall away.
+    if (!settled) {
+      for (const e of edges[mi]) {
+        const c = ease((t - e.carve) / 300);
+        if (c >= 1) continue;
+        const k = ease((t - e.bold) / 420);
+        ctx.globalAlpha = (LATTICE_ALPHA + (1 - LATTICE_ALPHA) * k) * (1 - c);
+        ctx.lineWidth = 1 + (sw - 1) * k;
+        const shrink = c * 0.5;
+        ctx.beginPath();
+        if (e.h) {
+          ctx.moveTo(mx + (e.x - half + shrink) * s, my + e.y * s);
+          ctx.lineTo(mx + (e.x + 1 + half - shrink) * s, my + e.y * s);
+        } else {
+          ctx.moveTo(mx + e.x * s, my + (e.y - half + shrink) * s);
+          ctx.lineTo(mx + e.x * s, my + (e.y + 1 + half - shrink) * s);
+        }
+        ctx.stroke();
+      }
     }
-    const b = ease((t - e.bold) / 420);
-    let alpha = LATTICE_ALPHA + (1 - LATTICE_ALPHA) * b;
-    let width = 1 + (lw - 1) * b;
-    if (e.type === 1) {
-      const c = ease((t - e.carve) / 320);
-      if (c >= 1) continue;
-      // Carved walls shrink back into the posts at either end and fade.
-      const k = c / 2;
-      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-      x1 += (mx - x1) * k * 2; y1 += (my - y1) * k * 2;
-      x2 += (mx - x2) * k * 2; y2 += (my - y2) * k * 2;
-      alpha *= 1 - c;
-      width *= 1 - c * 0.5;
-      if (c > 0) ctx.lineCap = "butt";
+
+    // The poem: every segment exactly as in the published PDF.
+    ctx.globalAlpha = settled ? 1 : LATTICE_ALPHA + (1 - LATTICE_ALPHA) * b;
+    ctx.lineWidth = settled ? sw : 1 + (sw - 1) * b;
+    ctx.beginPath();
+    const sg = m.segs;
+    for (let j = 0; j < sg.length; j += 4) {
+      ctx.moveTo(mx + sg[j] * s, my + sg[j + 1] * s);
+      ctx.lineTo(mx + sg[j + 2] * s, my + sg[j + 3] * s);
     }
-    ctx.globalAlpha = alpha;
-    ctx.lineWidth = width;
-    line(x1, y1, x2, y2);
-    ctx.lineCap = "square";
-  }
-  drawThread(t);
+    ctx.stroke();
+  });
   ctx.globalAlpha = 1;
+  drawThreads(t);
   return t;
 }
 
-// The thread runs through the middle of the corridors, thinner than the walls
-// and with round ends, so it never reads as a wall. Its loose end waits just
-// outside the entrance.
-function drawThread(t) {
-  const a = ease((t - (end - 300)) / 600);
+const OUT = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
+
+// The thread runs through the middle of the corridors, thinner than the walls,
+// with round ends. Until it is picked up, its loose end and knot wait outside
+// the entrance, off the poem.
+function drawThreads(t) {
+  const a = ease((t - (end - 400)) / 600);
   if (a <= 0) return;
   const { s, left, top } = geo;
-  const { W } = maze;
-  const cx = (i) => left + ((i % W) + 0.5) * s;
-  const cy = (i) => top + (((i / W) | 0) + 0.5) * s;
   ctx.globalAlpha = a;
-  ctx.lineWidth = Math.max(1.5, geo.lw * 0.6);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(left - s * 0.9, cy(0));
-  for (const i of thread) ctx.lineTo(cx(i), cy(i));
-  if (outAt) {
-    const k = ease((performance.now() - outAt) / 500);
-    const last = thread[thread.length - 1];
-    ctx.lineTo(cx(last) + s * 1.4 * k, cy(last));
-  }
-  ctx.stroke();
-  // The head of the thread: a small knot, where you pick it up again.
-  if (!outAt) {
-    const h = thread[thread.length - 1];
+  room.page.mazes.forEach((m, mi) => {
+    const { W, g } = m;
+    const mx = left + m.x * s, my = top + m.y * s;
+    const cx = (i) => mx + ((i % W) + 0.5) * s;
+    const cy = (i) => my + (((i / W) | 0) + 0.5) * s;
+    const lw = Math.max(1.5, m.stroke * s * 0.6);
+    const r = Math.max(2.5, lw * 1.4);
+    ctx.lineWidth = lw;
+    const [ex, ey] = OUT[g.entrance.side];
+    const e0 = g.entrance.cell;
+    const th = threads[mi];
     ctx.beginPath();
-    ctx.arc(cx(h), cy(h), Math.max(2.5, geo.lw * 0.9), 0, Math.PI * 2);
-    ctx.fill();
-  }
+    ctx.moveTo(cx(e0) + ex * 2.1 * s, cy(e0) + ey * 2.1 * s);
+    if (!th) {
+      if (mi !== active) return;
+      const kx = cx(e0) + ex * 1.25 * s, ky = cy(e0) + ey * 1.25 * s;
+      ctx.lineTo(kx, ky);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(kx, ky, r, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    for (const i of th) ctx.lineTo(cx(i), cy(i));
+    const last = th[th.length - 1];
+    if (outAt[mi]) {
+      const [dx, dy] = OUT[g.exit.side];
+      const k = ease((performance.now() - outAt[mi]) / 500);
+      ctx.lineTo(cx(last) + dx * 1.6 * s * k, cy(last) + dy * 1.6 * s * k);
+    }
+    ctx.stroke();
+    if (!outAt[mi]) {
+      ctx.beginPath();
+      ctx.arc(cx(last), cy(last), r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
   ctx.lineJoin = "miter";
-  ctx.lineCap = "square";
-}
-
-let LATTICE_ALPHA = 0.11;
-let TONE_ALPHA = 0.06;
-
-function line(x1, y1, x2, y2) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.globalAlpha = 1;
 }
 
 function loop() {
   cancelAnimationFrame(frame);
   const tick = (now) => {
     const t = draw(now);
-    if (t > end - 500) document.body.classList.add("carved");
-    if (t < end || (outAt && now - outAt < 600)) frame = requestAnimationFrame(tick);
+    if (t > end - 600) document.body.classList.add("carved");
+    canvas.dataset.settled = t >= end + 600 ? "1" : "";
+    const leaving = outAt.some((o) => o && now - o < 600);
+    if (t < end + 650 || leaving) frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
 }
 
-// ---------------------------------------------------------------- events
-
-let resizeTimer = 0;
-let lastWidth = innerWidth;
-addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    place(innerWidth === lastWidth);
-    lastWidth = innerWidth;
-    loop();
-  }, 60);
-});
-
 // ---------------------------------------------------------------- walking
 
-const linked = (a, b) => {
-  const { W, right, down } = maze;
-  if (b === a + 1 && a % W !== W - 1) return right[a];
-  if (b === a - 1 && b % W !== W - 1) return right[b];
-  if (b === a + W) return down[a];
-  if (b === a - W) return down[b];
-  return 0;
-};
+const ready = () => document.body.classList.contains("carved");
 
-// Take one step into a neighbouring cell: forward if it is new, back (winding
-// the thread up) if it is where we just came from.
-function step(to) {
-  if (outAt || !document.body.classList.contains("carved")) return false;
-  const head = thread[thread.length - 1];
-  if (thread.length > 1 && thread[thread.length - 2] === to) thread.pop();
-  else if (linked(head, to)) {
-    // Walking into a cell the thread already passes through cuts the loop off.
-    const seen = thread.indexOf(to);
-    if (seen >= 0) thread.length = seen + 1;
-    else thread.push(to);
-  } else return false;
-  if (thread[thread.length - 1] === maze.W * maze.H - 1) leave();
+function enter() {
+  if (threads[active] || outAt[active] || !ready()) return false;
+  threads[active] = [room.page.mazes[active].g.entrance.cell];
   loop();
   return true;
 }
 
-// Follow the pointer along the corridors: the shortest way from the head of
-// the thread to the cell under the finger, if it is close.
+// One step into a neighbouring cell: forward if new, back (winding the thread
+// up) if it is where we came from; walking into the thread cuts the loop off.
+function step(to) {
+  const m = room.page.mazes[active], th = threads[active];
+  if (!th || outAt[active] || !ready()) return false;
+  const head = th[th.length - 1];
+  if (th.length > 1 && th[th.length - 2] === to) th.pop();
+  else if (m.g.linked(head, to)) {
+    const seen = th.indexOf(to);
+    if (seen >= 0) th.length = seen + 1;
+    else th.push(to);
+  } else return false;
+  // A maze with a single gap (Language Is a Trap) has no way out.
+  if (m.g.gaps.length > 1 && th[th.length - 1] === m.g.exit.cell) leave();
+  loop();
+  return true;
+}
+
+// Follow the pointer along the corridors, if the cell under it is close.
 function walkTo(target) {
-  const head = thread[thread.length - 1];
-  if (target === head || target < 0) return;
-  const { W, H } = maze;
+  const m = room.page.mazes[active], th = threads[active];
+  if (!th || target < 0) return;
+  const head = th[th.length - 1];
+  if (target === head) return;
+  const { W, H } = m;
   const prev = new Map([[head, -1]]);
   let frontier = [head];
-  for (let d = 0; d < 6 && !prev.has(target); d++) {
+  for (let d = 0; d < 8 && !prev.has(target); d++) {
     const next = [];
     for (const i of frontier) {
       for (const j of [i + 1, i - 1, i + W, i - W]) {
-        if (j < 0 || j >= W * H || prev.has(j) || !linked(i, j)) continue;
+        if (j < 0 || j >= W * H || prev.has(j) || !m.g.linked(i, j)) continue;
         prev.set(j, i);
         next.push(j);
       }
@@ -392,37 +361,70 @@ function walkTo(target) {
   for (const i of route) if (!step(i)) break;
 }
 
-function cellAt(x, y) {
-  const { s, left, top } = geo;
-  const cx = Math.floor((x - left) / s), cy = Math.floor((y - top) / s);
-  if (cx < 0 || cy < 0 || cx >= maze.W || cy >= maze.H) return -1;
-  return cy * maze.W + cx;
+// Out by the exit: on to the next maze on this page, or to the next page.
+function leave() {
+  outAt[active] = performance.now();
+  const more = active < room.page.mazes.length - 1;
+  if (!more) {
+    solved.add(room.slug);
+    safeSet("labyrinta:solved", JSON.stringify([...solved]));
+  }
+  setTimeout(() => {
+    if (more) { active++; loop(); return; }
+    location.hash = ROOMS[(ROOMS.indexOf(room) + 1) % ROOMS.length].slug;
+  }, reduceMotion.matches ? 300 : 1000);
 }
 
-function leave() {
-  outAt = performance.now();
-  const pool = SENTENCES.filter((s) => s.slug !== sentence.slug);
-  const next = pool[Math.floor(Math.random() * pool.length)].slug;
-  setTimeout(() => { location.hash = next; }, reduceMotion.matches ? 300 : 1100);
+// Which maze, and which cell of it, is under a point.
+function at(x, y) {
+  const { s, left, top } = geo;
+  for (let mi = 0; mi < room.page.mazes.length; mi++) {
+    const m = room.page.mazes[mi];
+    const cx = Math.floor((x - left) / s - m.x), cy = Math.floor((y - top) / s - m.y);
+    if (cx >= 0 && cy >= 0 && cx < m.W && cy < m.H) return { mi, cell: cy * m.W + cx };
+  }
+  return { mi: -1, cell: -1 };
+}
+
+function nearKnot(x, y) {
+  if (threads[active] || outAt[active]) return false;
+  const m = room.page.mazes[active];
+  const { s, left, top } = geo;
+  const [ex, ey] = OUT[m.g.entrance.side];
+  const i = m.g.entrance.cell;
+  const kx = left + (m.x + (i % m.W) + 0.5 + ex * 1.25) * s;
+  const ky = top + (m.y + ((i / m.W) | 0) + 0.5 + ey * 1.25) * s;
+  return Math.hypot(x - kx, y - ky) < Math.max(22, s);
 }
 
 let dragging = false;
 canvas.addEventListener("pointerdown", (e) => {
-  const c = cellAt(e.clientX, e.clientY);
-  // Pick the thread up anywhere along it (or at the entrance).
-  const at = thread.indexOf(c);
-  if (at < 0 || outAt) return;
-  if (!document.body.classList.contains("carved")) return;
-  thread.length = at + 1;
+  if (!ready()) return;
+  const hit = at(e.clientX, e.clientY);
+  const m = room.page.mazes[active];
+  if (!threads[active]) {
+    if (!nearKnot(e.clientX, e.clientY) && !(hit.mi === active && hit.cell === m.g.entrance.cell)) return;
+    if (!enter()) return;
+  } else {
+    if (hit.mi !== active || outAt[active]) return;
+    const k = threads[active].indexOf(hit.cell);
+    if (k < 0) return;
+    threads[active].length = k + 1;
+  }
   dragging = true;
   canvas.setPointerCapture(e.pointerId);
   canvas.classList.add("walking");
   loop();
 });
 canvas.addEventListener("pointermove", (e) => {
-  const c = cellAt(e.clientX, e.clientY);
-  if (dragging) walkTo(c);
-  else canvas.classList.toggle("can-walk", thread.includes(c) && !outAt);
+  const hit = at(e.clientX, e.clientY);
+  if (dragging) {
+    if (hit.mi === active) walkTo(hit.cell);
+    return;
+  }
+  const th = threads[active];
+  const can = ready() && !outAt[active] && ((th && hit.mi === active && th.includes(hit.cell)) || nearKnot(e.clientX, e.clientY));
+  canvas.classList.toggle("can-walk", !!can);
 });
 const drop = () => { dragging = false; canvas.classList.remove("walking"); };
 canvas.addEventListener("pointerup", drop);
@@ -431,18 +433,29 @@ canvas.addEventListener("pointercancel", drop);
 const KEYS = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
 addEventListener("keydown", (e) => {
   const k = KEYS[e.key];
-  if (!k || e.metaKey || e.ctrlKey || e.altKey || !maze) return;
-  const head = thread[thread.length - 1];
-  const x = (head % maze.W) + k[0], y = ((head / maze.W) | 0) + k[1];
-  if (x < 0 || y < 0 || x >= maze.W || y >= maze.H) return;
+  if (!k || e.metaKey || e.ctrlKey || e.altKey || !room) return;
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#rooms")) return;
   e.preventDefault();
-  step(y * maze.W + x);
+  if (!threads[active]) { enter(); return; }
+  const m = room.page.mazes[active];
+  const head = threads[active][threads[active].length - 1];
+  const x = (head % m.W) + k[0], y = ((head / m.W) | 0) + k[1];
+  if (x < 0 || y < 0 || x >= m.W || y >= m.H) return;
+  step(y * m.W + x);
+});
+
+// ---------------------------------------------------------------- events
+
+let resizeTimer = 0;
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { place(); loop(); }, 60);
 });
 addEventListener("hashchange", () => {
-  const next = SENTENCES.find((s) => s.slug === decodeURIComponent(location.hash.slice(1)));
-  if (next) show(next, true);
+  const r = fromHash();
+  if (r && r !== room) show(r, true);
 });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => loop());
 
 document.documentElement.classList.add("js");
-show(pick(), true);
+const lastRoom = ROOMS.find((r) => r.slug === safeGet("labyrinta:last"));
+show(fromHash() || lastRoom || ROOMS[0], true);

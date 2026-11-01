@@ -2,3 +2,4 @@
 node_modules/
 # Local-only research drawn from this laptop. Never commit or deploy.
 notes/
+__pycache__/

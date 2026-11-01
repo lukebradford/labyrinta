@@ -1,21 +1,10 @@
 :root {
   --bg: #ffffff;
-  --ink: #000000;
-  --soft: #6b6b6b;
-  --lattice: 0.11;
-  --tone: 0.06;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", Georgia, serif;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0c0c0c;
-    --ink: #ececea;
-    --soft: #9a9a96;
-    --lattice: 0.075;
-    --tone: 0.075;
-  }
+  --ink: #231f20; /* the black of the published PDFs */
+  --soft: #6b6768;
+  /* The published pages are set in Minion Pro and Adobe Hebrew; use them if installed. */
+  --serif: "Minion Pro", "Adobe Hebrew", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +20,6 @@ body {
   font-family: var(--serif);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 #lattice {
@@ -44,71 +32,73 @@ body {
 #lattice.walking { cursor: grabbing; }
 #lattice:focus-visible { outline: none; }
 
-/* The credit, small and quiet in the top left, as on the published pages. */
+/* The credit, top left, as on the published pages. */
 #credit {
   position: absolute;
   margin: 0;
   font-size: 12px;
-  line-height: 1.45;
-  white-space: nowrap;
+  line-height: 1.35;
 }
-#credit span { display: block; }
-#credit .name {
-  font-size: 13px;
-  letter-spacing: 0.08em;
-}
-#credit .after { color: var(--soft); }
 
-/* The caption: the sentence again, in letterspaced capitals, under the maze. */
-.plate {
+/* The title, in widely spaced capitals, centred above the maze. */
+#heading {
   position: absolute;
+  margin: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.42em;
+  word-spacing: 0.3em;
+  text-transform: uppercase;
   text-align: center;
-  padding: 0 12px;
   opacity: 0;
   transition: opacity 900ms ease;
 }
-.carved .plate { opacity: 1; }
-
-#caption {
-  margin: 0;
-  font-weight: 400;
-  font-size: clamp(12px, 1.25vw, 15px);
-  line-height: 1.9;
-  letter-spacing: 0.34em;
-  word-spacing: 0.5em;
-  text-transform: uppercase;
-  /* letter-spacing trails after the last letter; pull it back so the line centres */
-  margin-right: -0.34em;
-}
-#caption a {
-  color: inherit;
-  text-decoration: none;
-}
-#caption a:hover,
-#caption a:focus-visible {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.35em;
-}
-#caption a:focus-visible { outline: none; }
-
-#note {
-  margin: 0.35em 0 0;
-  font-size: 12px;
+#numeral {
+  text-transform: none;
+  letter-spacing: 0.1em;
   font-style: italic;
+  margin-left: 0.4em;
+}
+#numeral:empty { display: none; }
+.carved #heading { opacity: 1; }
+
+/* The poems, one small cell each. */
+#rooms {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+}
+#rooms a {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink);
+  opacity: 0.35;
+}
+#rooms a.walked { background: var(--ink); }
+#rooms a[aria-current="page"] { opacity: 1; }
+#rooms a:hover,
+#rooms a:focus-visible { opacity: 1; outline: none; }
+#rooms a:focus-visible { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+#rooms .gap { width: 5px; }
+
+#site {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   color: var(--soft);
-  letter-spacing: 0.02em;
 }
 
-/* Without scripts there is no carving; just the words. */
-html:not(.js) main {
-  min-height: 100%;
-  display: grid;
-  place-items: center;
-}
-html:not(.js) .plate { position: static; opacity: 1; }
-html:not(.js) #credit { left: 20px; top: 16px; }
+.noscript { padding: 24px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .plate { transition: none; }
+  #heading { transition: none; }
 }

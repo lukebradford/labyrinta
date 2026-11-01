@@ -4,24 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Labÿrínta</title>
-  <meta name="description" content="Sentences carved out of a lattice, each one a maze you could walk: one way in at the top left, one way out at the bottom right.">
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0c0c0c" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Luke Bradford's published maze poems, reproduced exactly, to be walked.">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
   <meta property="og:title" content="Labÿrínta">
-  <meta property="og:description" content="Sentences carved out of a lattice, each one a maze.">
+  <meta property="og:description" content="Luke Bradford's published maze poems, to be walked.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=4">
-  <script type="module" src="main.js?v=4"></script>
+  <link rel="stylesheet" href="style.css?v=5">
+  <script type="module" src="main.js?v=5"></script>
 </head>
 <body>
-  <canvas id="lattice" role="img" tabindex="0" aria-label="A maze whose corridors spell a sentence."></canvas>
-  <p id="credit"><span class="name">Labÿrínta</span><span class="after">after Luke Bradford’s <i>A&nbsp;Labyrinth Is&nbsp;a&nbsp;…</i></span></p>
-  <main>
-    <div class="plate" aria-live="polite">
-      <h1 id="caption"><a href="#">a labyrinth is a blank page</a></h1>
-      <p id="note">new · Labÿrínta began as one</p>
-    </div>
-  </main>
+  <canvas id="lattice" role="img" tabindex="0" aria-label="A maze poem by Luke Bradford."></canvas>
+  <p id="credit">Luke Bradford<br><span id="credit-line"></span></p>
+  <h1 id="heading" aria-live="polite"><span id="title"></span> <span id="numeral"></span></h1>
+  <nav id="rooms" aria-label="The poems"></nav>
+  <p id="site">Labÿrínta</p>
+  <noscript><p class="noscript">Labÿrínta shows Luke Bradford’s published maze poems, to be walked. It needs JavaScript.</p></noscript>
 </body>
 </html>

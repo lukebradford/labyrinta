@@ -54,5 +54,17 @@
       "The layout avoids wide word spaces, so lines break where the spaces stay narrow",
       "Checked across 75 carvings (every sentence at five screen sizes): full rectangle, no dead cells, every corridor reachable, a route from entrance to exit"
     ]
+  },
+  {
+    "id": 5,
+    "date": "2026-11-01T11:09:50.291Z",
+    "title": "The published poems, exactly",
+    "summary": "The site now shows only Luke Bradford's published maze poems, read stroke by stroke from the published PDFs and verified pixel for pixel, with the carving, Ariadne's thread and the walk from poem to poem. The generated sentences and the site's own alphabet are gone.",
+    "details": [
+      "Fifteen rooms, one per published page, in order of publication: Four Paths (i–iv), Four Paths II (i–iv), Two Paths, A Labyrinth Is a Barrel of Laughs, Mesh, A Labyrinth Is a Narrow Hell, A Labyrinth Is a Borderline, Language Is a Trap, One Path; each credited with venue and date",
+      "site/poems.js holds every wall stroke as published (endpoints within 0.0002 pt of the PDFs); tools/poems/extract.py regenerates it and tools/poems/verify.py checks it, including a headless-Chrome check that the site's canvas matches MuPDF renders of the PDFs with zero differing pixels",
+      "Walking is read off the published walls (site/walls.js): Two Paths is walked maze by maze, and Language Is a Trap has no way out, as published",
+      "Removed the maze-letter generator, the invented sentences and the ÿ favicon; the page is light only, like the poems"
+    ]
   }
 ]
