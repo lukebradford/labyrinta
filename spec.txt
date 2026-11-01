@@ -1,0 +1,7 @@
+Create Labÿrínta, an experimental agentic art project.
+
+It's a public website that starts out totally blank.
+
+The process of changes once the site is live is as follows:
+- The project is open-ended, but heavily inspired (especially at the start) by any and all content you can find on this laptop related to labyrinths and mazes
+- When I run an agent session in this directory locally and type "Continue", the agent examines the existing website and asks itself: "What can I do to make this website more beautiful, detailed, compelling, engaging, polished, unique, performant, subtle, surprising, mobile-friendly, reliable, secure, cohesive, outlandish, intriguing, well designed, and technically impressive? What are the bugs I can identify and fix? What would draw more people in to increase the reach of the site? What is my vision for the future of this project?" It then implements one or more specific, contained sets of changes and publishes them.
