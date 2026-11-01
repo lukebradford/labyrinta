@@ -10,6 +10,7 @@
 
 - **One grammar.** Square cells, orthogonal walls of one weight (about a fifth of a cell), square caps, black on white (and its inverse in the dark). Floating stubs are counters; sealed cells are dots (the ÿ's two cells are the site's mark). Colour is held back for one rare event later: the *Any Hue* gradient.
 - **Generated, never stored.** Every maze is built live from a glyph table (`site/maze.js`) and a seed. Same sentence + same line breaks = same maze, so things can be addressed and shared (`#blank-page`).
+- **The series' frame.** Every carving is a plain rectangle with exactly two gaps (in at the top left, out at the bottom right): no indents, no dead cells inside. Short lines are justified with toned word spaces, never left ragged.
 - **Real mazes.** The generator guarantees connectivity and a route. Anything we add must keep that true. Interaction should eventually *use* it.
 - **The page is the lattice.** New rooms are clearings and carvings in the same grid, not new pages pasted on top. Text sits in clearings cut from the lattice.
 - **Honest provenance.** Every carved sentence is new and says so. If an exact reproduction of a published piece is ever shown, it is credited with venue and year.

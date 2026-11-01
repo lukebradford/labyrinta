@@ -110,13 +110,25 @@ export function layout(words, boxW, boxH, maxCell = 56) {
     const orphan = lines[k - 1].length === 1 && lines[k - 1][0].length < 2 ? 0.25 : 0;
     // The originals are 2:1 to 3:1; very long strips lose the look of a page.
     const wide = Math.max(0, W / H - 3.2) * 0.12;
-    const score = cell * (1 - 1.8 * slack - orphan - wide) - k * 0.01;
-    if (!best || score > best.score) best = { score, lines: lines.map((l) => l.join("")), W, H, cell };
+    // Short lines are justified with word spaces; wide ones read as holes.
+    let holes = 0;
+    lines.forEach((l, li) => {
+      const slots = l.length - 1 + (li > 0) + (li < k - 1);
+      const room = Math.ceil((W - lw[li]) / Math.max(1, slots));
+      holes += Math.max(0, room - 2);
+    });
+    const score = cell * (1 - 1.8 * slack - orphan - wide - 0.07 * holes) - k * 0.01;
+    if (!best || score > best.score) best = { score, lines: lines.map((l) => l.join(" ")), W, H, cell };
   }
   return best;
 }
 
-// Build the maze for a list of lines (already joined, no spaces).
+// Build the maze for a list of lines (words separated by spaces).
+//
+// The frame is always a plain rectangle with two gaps, as in the series: no
+// indents and no dead cells inside it. A line shorter than the longest is
+// justified: its spare columns become word spaces, small open rooms of free
+// corridor (toned like the rest) set between its words.
 export function carve(lines, seedText) {
   const W = Math.max(...lines.map(glyphWidth));
   const H = lines.length * ROWS;
@@ -127,13 +139,39 @@ export function carve(lines, seedText) {
   const id = (x, y) => y * W + x;
 
   let gi = 0;
+  const space = (x0, y0, w, g) => {
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = id(x0 + x, y0 + y);
+        kind[i] = FREE;
+        glyphOf[i] = g;
+        right[i] = x < w - 1 ? 1 : 0;
+        down[i] = y < ROWS - 1 ? 1 : 0;
+      }
+    }
+  };
   lines.forEach((line, li) => {
-    const lw = glyphWidth(line);
-    // First line flush left (the entrance), last line flush right (the exit),
-    // lines between centred: the text steps down toward the way out.
-    let x0 = li === 0 ? 0 : li === lines.length - 1 ? W - lw : Math.floor((W - lw) / 2);
+    const words = line.split(" ");
+    const spare = W - glyphWidth(line);
+    // Share the spare columns among the gaps between words and the two ends of
+    // the line, middle gaps first. The first line keeps its start and the last
+    // its end, so the way in and the way out both open into a letter.
+    const slots = [];
+    if (li > 0) slots.push(0);
+    for (let w = 1; w < words.length; w++) slots.push(w);
+    if (li < lines.length - 1) slots.push(words.length);
+    const mid = words.length / 2;
+    slots.sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
+    const widths = new Array(words.length + 1).fill(0);
+    for (let k = 0; k < spare && slots.length; k++) widths[slots[k % slots.length]] += 1;
+    let x0 = 0;
     const y0 = li * ROWS;
-    for (const ch of line) {
+    const gap = (w) => { if (widths[w]) { space(x0, y0, widths[w], gi++); x0 += widths[w]; } };
+    words.forEach((word, wi) => { gap(wi); placeWord(word); });
+    gap(words.length);
+
+    function placeWord(word) {
+    for (const ch of word) {
       const g = GLYPHS[ch];
       for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < g.w; x++) {
@@ -146,6 +184,7 @@ export function carve(lines, seedText) {
       }
       x0 += g.w;
       gi++;
+    }
     }
   });
 
