@@ -1,35 +1,29 @@
-// The sentences the lattice can be carved into. Most are titles from Luke
-// Bradford's maze-poem series, with where they first appeared. A few are new,
-// written here in the same manner; they say so.
+// The sentences the lattice is carved into. All are new, written for
+// Labÿrínta in the manner of Luke Bradford's "A Labyrinth Is a …" series.
+//
+// Rule: his own visual poems may appear on the site only if they have been
+// published, and only as exact reproductions, every wall segment as in the
+// published piece. Never carve his titles or lines in this generator, and never
+// show unpublished pieces.
 
 export const SENTENCES = [
-  ["a labyrinth is a library of babel", "Luke Bradford · petrichor, 2019"],
-  ["a labyrinth is a trail", "Luke Bradford · Two Paths, No Press, 2019"],
-  ["a labyrinth is a trial", "Luke Bradford · Two Paths, No Press, 2019"],
-  ["a labyrinth is a rabbit hole", "Luke Bradford · broadside, The Blasted Tree"],
-  ["a labyrinth is a barrel of laughs", "Luke Bradford · postcard, Timglaset, 2019"],
-  ["a labyrinth is a narrow hell", "Luke Bradford · Myth & Metamorphosis, Penteract Press, 2020"],
-  ["a labyrinth is a borderline", "Luke Bradford · Myth & Metamorphosis, Penteract Press, 2020"],
-  ["a labyrinth is barely real", "Luke Bradford · The Minute Review"],
-  ["a labyrinth is not a house", "Luke Bradford · One Path, Paper View Books, 2024"],
-  ["language is a maze", "Luke Bradford · Four Paths, Timglaset Editions, 2018"],
-  ["a word is a labyrinth", "Luke Bradford · Four Paths, Timglaset Editions, 2018"],
-  ["a word is a language", "Luke Bradford · Four Paths, Timglaset Editions, 2018"],
-  ["a maze is a labyrinth", "Luke Bradford · Four Paths, Timglaset Editions, 2018"],
-  ["language is a trap", "Luke Bradford · Buzdokuz, 2022"],
-  ["a labyrinth murmurs numbers", "Luke Bradford · Four Paths II, Penteract Press, 2018"],
-  ["a labyrinth burns all its labels", "Luke Bradford · Four Paths II, Penteract Press, 2018"],
-  ["a labyrinth is a membrane", "after Luke Bradford"],
-  ["a labyrinth is a breathless lie", "after Luke Bradford"],
-  ["a labyrinth is a blind alley", "after Luke Bradford"],
-  ["a labyrinth is a rebirth", "after Luke Bradford"],
-  ["a labyrinth is a laboratory", "after Luke Bradford"],
-  ["a labyrinth is a marathon", "after Luke Bradford"],
-  ["a labyrinth is a template", "after Luke Bradford"],
-  ["a labyrinth is a blank page", "new · Labÿrínta began as one"],
-  ["a labyrinth is a room that grows", "new · Labÿrínta"],
-  ["a labyrinth is a tiny brain", "new · only the letters of labyrinth"],
-  ["a labyrinth is a briny bath", "new · only the letters of labyrinth"],
-  ["a labyrinth is a thin hint", "new · only the letters of labyrinth"],
-  ["a labyrinth is a line that thinks", "new · Labÿrínta"],
-].map(([text, note]) => ({ text, note, slug: text.replace(/^a labyrinth is /, "").replace(/ /g, "-") }));
+  ["a labyrinth is a blank page", "Labÿrínta began as one"],
+  ["a labyrinth is a room that grows", ""],
+  ["a labyrinth is a line that thinks", ""],
+  ["a labyrinth is a corridor with second thoughts", ""],
+  ["a labyrinth is a path that hesitates", ""],
+  ["a labyrinth is a straight line folded", ""],
+  ["a labyrinth is an answer in no hurry", ""],
+  ["a labyrinth is a slow way home", ""],
+  ["a labyrinth is a sentence you can stand in", ""],
+  ["a labyrinth is a word for waiting", ""],
+  ["a labyrinth is a tiny brain", "only the letters of labyrinth"],
+  ["a labyrinth is a briny bath", "only the letters of labyrinth"],
+  ["a labyrinth is a thin hint", "only the letters of labyrinth"],
+  ["a labyrinth is a hint in a tiny barn", "only the letters of labyrinth"],
+  ["a labyrinth is a rain in thin air", "only the letters of labyrinth"],
+].map(([text, note]) => ({
+  text,
+  note: note ? `new · ${note}` : "new",
+  slug: text.replace(/^a labyrinth is /, "").replace(/ /g, "-"),
+}));

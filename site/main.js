@@ -22,9 +22,6 @@ let frame = 0;
 let thread = [0]; // Ariadne's thread: the cells walked so far, from the entrance
 let outAt = 0; // when the thread left by the exit (0 while still inside)
 
-// After the way out, the four sentences of Four Paths lead into one another.
-const FOUR_PATHS = ["language-is-a-maze", "a-maze-is-a-labyrinth", "a-word-is-a-labyrinth", "a-word-is-a-language"];
-
 // ---------------------------------------------------------------- sentence
 
 function pick() {
@@ -67,52 +64,68 @@ function place(keepLines = false) {
   const top = narrow ? 64 : 84; // room for the credit
   const below = narrow ? 120 : 132; // room for the caption
   const boxW = vw - 2 * margin;
-  const boxH = Math.max(80, vh - top - below - margin);
+  let boxH = Math.max(80, vh - top - below - margin);
   const words = sentence.text.split(" ");
   const maxCell = narrow ? 40 : 52;
-  // A phone's toolbar sliding away changes only the height: keep the same
-  // carving (and the thread in it) rather than breaking the lines afresh.
-  const fit = keepLines && maze
-    ? { lines: maze.lines, cell: Math.min(maxCell, boxW / maze.W, boxH / maze.H) }
-    : layout(words, boxW, boxH, maxCell);
 
-  const key = fit.lines.join("/");
-  if (!maze || maze.lines.join("/") !== key) {
-    maze = carve(fit.lines, sentence.text);
-    edges = buildEdges(maze);
-    thread = [0];
-    outAt = 0;
+  // Lay out, then make sure nothing collides: the maze must clear the credit,
+  // and the caption must fit on screen. If not, try again with a smaller box.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    // A phone's toolbar sliding away changes only the height: keep the same
+    // carving (and the thread in it) rather than breaking the lines afresh.
+    const fit = keepLines && maze
+      ? { lines: maze.lines, cell: Math.min(maxCell, boxW / maze.W, boxH / maze.H) }
+      : layout(words, boxW, boxH, maxCell);
+
+    if (!maze || maze.lines.join("/") !== fit.lines.join("/")) {
+      maze = carve(fit.lines, sentence.text);
+      edges = buildEdges(maze);
+      thread = [0];
+      outAt = 0;
+    }
+
+    const s = Math.max(6, Math.floor(fit.cell));
+    const bw = maze.W * s, bh = maze.H * s;
+    const left = Math.round((vw - bw) / 2);
+    // Centre the carving and its caption together in the space under the credit.
+    const groupH = bh + s + below * 0.6;
+    let blockTop = Math.round(top + Math.max(0, (vh - top - groupH) / 2 - s));
+    const ox = mod(left, s), oy = mod(blockTop, s);
+
+    // The credit, in a clearing in the top left corner of the lattice.
+    const cx = ox + s * Math.max(1, Math.ceil((16 - ox) / s));
+    const cy = oy + s * Math.max(0, Math.ceil((12 - oy) / s));
+    credit.style.cssText = `left:${cx + Math.round(s * 0.5)}px;top:0px;`;
+    const crH = credit.offsetHeight, crW = credit.offsetWidth;
+    const crRows = Math.max(1, Math.ceil((crH + s * 0.6) / s));
+    const crBox = [cx, cy, snapUp(crW + s, s), crRows * s];
+    // Push the maze down whole rows (so the lattice stays aligned) until it
+    // clears the credit, if they share any columns.
+    if (cx + crBox[2] > left && blockTop < cy + crBox[3] + s) {
+      blockTop += snapUp(cy + crBox[3] + s - blockTop, s);
+    }
+
+    // The caption, in a clearing one row below the maze.
+    const capW = Math.max(bw, Math.min(vw - 2 * 16, 34 * 16));
+    const capLeft = snapDown(Math.round((vw - capW) / 2) - ox, s) + ox;
+    const capRight = snapUp(Math.round((vw + capW) / 2) - ox, s) + ox;
+    caption.parentElement.style.cssText = `left:${capLeft}px;width:${capRight - capLeft}px;`;
+    const capH = caption.parentElement.offsetHeight;
+    const capTop = blockTop + bh + s;
+    const rows = Math.max(2, Math.ceil((capH + s) / s));
+    const overflow = capTop + rows * s - vh;
+    if (overflow > 0 && attempt < 3 && s > 6) {
+      boxH = Math.max(40, boxH - overflow - s);
+      keepLines = false;
+      continue;
+    }
+    caption.parentElement.style.top = `${capTop + Math.round((rows * s - capH) / 2)}px`;
+    credit.style.top = `${cy + Math.round((crRows * s - crH) / 2)}px`;
+
+    const lw = Math.max(2, 2 * Math.round(s / 10));
+    geo = { vw, vh, s, lw, left, top: blockTop, bw, bh, ox, oy, clear: [[capLeft, capTop, capRight - capLeft, rows * s], crBox] };
+    break;
   }
-
-  const s = Math.max(6, Math.floor(fit.cell));
-  const bw = maze.W * s, bh = maze.H * s;
-  const left = Math.round((vw - bw) / 2);
-  // Centre the carving and its caption together in the space under the credit.
-  const groupH = bh + s + below * 0.6;
-  const blockTop = Math.round(top + Math.max(0, (vh - top - groupH) / 2 - s));
-  const lw = Math.max(2, 2 * Math.round(s / 10));
-
-  geo = { vw, vh, s, lw, left, top: blockTop, bw, bh, ox: mod(left, s), oy: mod(blockTop, s), clear: [] };
-
-  // The caption sits in a clearing cut out of the lattice, one row below the maze.
-  const capW = Math.max(bw, Math.min(vw - 2 * 16, 34 * 16));
-  const capLeft = snapDown(Math.round((vw - capW) / 2) - geo.ox, s) + geo.ox;
-  const capRight = snapUp(Math.round((vw + capW) / 2) - geo.ox, s) + geo.ox;
-  caption.parentElement.style.cssText = `left:${capLeft}px;width:${capRight - capLeft}px;`;
-  const capH = caption.parentElement.offsetHeight;
-  const capTop = blockTop + bh + s;
-  const rows = Math.max(2, Math.ceil((capH + s) / s));
-  caption.parentElement.style.top = `${capTop + Math.round((rows * s - capH) / 2)}px`;
-  geo.clear.push([capLeft, capTop, capRight - capLeft, rows * s]);
-
-  // And the credit, in the top left corner.
-  const cx = geo.ox + s * Math.max(1, Math.ceil((16 - geo.ox) / s));
-  const cy = geo.oy + s * Math.max(0, Math.ceil((12 - geo.oy) / s));
-  credit.style.cssText = `left:${cx + Math.round(s * 0.5)}px;top:0px;`;
-  const crH = credit.offsetHeight, crW = credit.offsetWidth;
-  const crRows = Math.max(1, Math.ceil((crH + s * 0.6) / s));
-  credit.style.top = `${cy + Math.round((crRows * s - crH) / 2)}px`;
-  geo.clear.push([cx, cy, snapUp(crW + s, s), crRows * s]);
 
   const dpr = Math.min(3, devicePixelRatio || 1);
   canvas.width = Math.round(vw * dpr);
@@ -388,13 +401,8 @@ function cellAt(x, y) {
 
 function leave() {
   outAt = performance.now();
-  const at = FOUR_PATHS.indexOf(sentence.slug);
-  let next;
-  if (at >= 0) next = FOUR_PATHS[(at + 1) % FOUR_PATHS.length];
-  else {
-    const pool = SENTENCES.filter((s) => s.slug !== sentence.slug);
-    next = pool[Math.floor(Math.random() * pool.length)].slug;
-  }
+  const pool = SENTENCES.filter((s) => s.slug !== sentence.slug);
+  const next = pool[Math.floor(Math.random() * pool.length)].slug;
   setTimeout(() => { location.hash = next; }, reduceMotion.matches ? 300 : 1100);
 }
 

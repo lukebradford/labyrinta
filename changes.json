@@ -31,5 +31,17 @@
       "A phone toolbar sliding away no longer re-breaks the lines and loses the thread",
       "The generator modules are imported with the page's version stamp, so returning visitors never mix old and new code"
     ]
+  },
+  {
+    "id": 3,
+    "date": "2026-11-01T10:39:49.083Z",
+    "title": "Only new sentences",
+    "summary": "The owner's rule: his visual poems may appear only if published, and only as exact reproductions down to every wall segment. The site had been carving his titles in its own alphabet (approximate versions) and showing unpublished titles, so all of them are removed; the lattice now carves only sentences written new for Labÿrínta.",
+    "details": [
+      "Removed all 23 sentences taken from Luke Bradford's maze poems (16 published titles carved approximately, 7 unpublished) and the Four Paths loop that walked through four of them",
+      "Fifteen new sentences, each marked new; five use only the letters of labyrinth",
+      "The rule is written into VISION.md and the sentence list so future sessions keep it",
+      "Fixed a layout bug where a wide carving on a short screen ran into the credit in the top left; the maze now steps down by whole rows to clear it, and shrinks if the caption would fall off screen"
+    ]
   }
 ]
