@@ -5,5 +5,18 @@
     "title": "A blank page",
     "summary": "Labÿrínta begins as nothing at all: an empty page, the first room of a labyrinth not yet built.",
     "details": []
+  },
+  {
+    "id": 1,
+    "date": "2026-11-01T10:32:33.938Z",
+    "title": "The first carving",
+    "summary": "The blank page becomes a lattice, and out of it a sentence is carved as a real maze in the grammar of the 'A Labyrinth Is a …' series: letters as white corridors, one way in at the top left, one way out at the bottom right.",
+    "details": [
+      "A maze-letter alphabet and generator (site/maze.js): glyphs drawn as corridors on a five-row grid, joined by a random minimum spanning tree so every corridor is reachable and a route always exists",
+      "Line breaks chosen live for the screen, so the carving reflows from two lines on desktop to a stepped cascade on a phone",
+      "The carving animates: the lattice thickens into a template, then walls fall away in the order a flood from the entrance reaches them (static under reduced motion)",
+      "29 sentences: Luke Bradford's titles credited with venue and year, plus a few new ones marked as new; each has a shareable #address",
+      "Light and dark schemes, the ÿ's two sealed cells as favicon, and VISION.md written"
+    ]
   }
 ]
